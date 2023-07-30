@@ -20,15 +20,17 @@ var (
 )
 
 const (
-	pageNotFound = 404
-	nullPointer  = 700 // custom error code will start from 700
-	accessDenied = 701
+	pageNotFound                        = 404
+	nullPointer                         = 700 // custom error code will start from 700
+	accessDenied                        = 701
+	invalidUriOrInternetConnectionIssue = 702
 )
 
 var errorCodeWithMessageMap = map[int]string{
 	404: "Page not found please check your url and try again",
 	700: "Found pointer while accessing the node",
 	701: "Access defined please check your url or wait for some time before retry",
+	702: "The url you have provide might be invalid or you have network connectivity issue.",
 }
 
 // VideoInfo are information about the video that do not change
@@ -260,14 +262,15 @@ func getYoutubeCommentCount(url string) float64 {
 	return getApproximateValueFromYoutubeCommentCount(commentCountStr.(string))
 }
 
-func ScrapeYoutubeData(url string) (VideoMetrics, error) {
+func ScrapeYoutubeData(url string) (VideoMetrics, VideoAnalyticsError) {
 	var videoMetrics VideoMetrics
 
 	soupObj, err := soup.Get(url)
 
 	if err != nil {
 		fmt.Println("An error happend while trying get the url")
-		return VideoMetrics{}, errors.New("Error happening while trying to call \"soup.Get(url)\". Please check your internet connection ! ")
+		//return VideoMetrics{}, errors.New("Error happening while trying to call \"soup.Get(url)\". Please check your internet connection ! ")
+		return VideoMetrics{}, VideoAnalyticsError{invalidUriOrInternetConnectionIssue, errorCodeWithMessageMap[invalidUriOrInternetConnectionIssue]}
 	}
 
 	htmlContent := soup.HTMLParse(soupObj)
@@ -281,7 +284,7 @@ func ScrapeYoutubeData(url string) (VideoMetrics, error) {
 	videoMetrics.LikeCount = getYoutubeLikeCount(url)
 	videoMetrics.CommentCount = getYoutubeCommentCount(url)
 
-	return videoMetrics, nil
+	return videoMetrics, VideoAnalyticsError{}
 }
 
 func GetTiktokVideoId(url string) string {
@@ -357,14 +360,16 @@ func GetTiktokVideoDuration(url string) (int, error) {
 	return 0, nil
 }
 
-func ScrapeTiktokData(url string) (VideoMetrics, error) {
+func ScrapeTiktokData(url string) (VideoMetrics, VideoAnalyticsError) {
 	var videoMetrics VideoMetrics
 	rand.Seed(time.Now().UnixNano())
 	soupObj, err := soup.Get(url)
 
 	if err != nil {
 		log.Fatalf("%s", err)
-		return VideoMetrics{}, errors.New("please check your internet connection or the url that you are provided")
+		//return VideoMetrics{}, errors.New("please check your internet connection or the url that you are provided")
+
+		return VideoMetrics{}, VideoAnalyticsError{invalidUriOrInternetConnectionIssue, errorCodeWithMessageMap[invalidUriOrInternetConnectionIssue]}
 	}
 
 	htmlContent := soup.HTMLParse(soupObj)
@@ -381,14 +386,16 @@ func ScrapeTiktokData(url string) (VideoMetrics, error) {
 
 	content := htmlContent.Find("script", "id", "SIGI_STATE")
 	if content.Pointer == nil {
-		return VideoMetrics{}, errors.New("nil pointer in search for SIGI_STATE")
+		//return VideoMetrics{}, errors.New("nil pointer in search for SIGI_STATE")
+		return VideoMetrics{}, VideoAnalyticsError{nullPointer, errorCodeWithMessageMap[nullPointer]}
 	}
 	if len(content.FullText()) > 0 {
 		var jsonData map[string]interface{}
 
 		error := json.Unmarshal([]byte(content.FullText()), &jsonData)
 		if error != nil {
-			return VideoMetrics{}, errors.New("got error while unmarshalling the json data ")
+			//return VideoMetrics{}, errors.New("got error while unmarshalling the json data ")
+			return VideoMetrics{}, VideoAnalyticsError{nullPointer, errorCodeWithMessageMap[nullPointer]}
 		}
 
 		// fetching the view count
@@ -396,12 +403,14 @@ func ScrapeTiktokData(url string) (VideoMetrics, error) {
 
 		lvl1, ok := jsonData["ItemModule"].(map[string]interface{})
 		if !ok {
-			return VideoMetrics{}, errors.New("cannot find the ItemModule")
+			//return VideoMetrics{}, errors.New("cannot find the ItemModule")
+			return VideoMetrics{}, VideoAnalyticsError{nullPointer, errorCodeWithMessageMap[nullPointer]}
 		}
 
 		lvl2, ok := lvl1[tiktokVideoId].(map[string]interface{})
 		if !ok {
-			return VideoMetrics{}, errors.New("cannot find the tiktok video id")
+			//return VideoMetrics{}, errors.New("cannot find the tiktok video id")
+			return VideoMetrics{}, VideoAnalyticsError{nullPointer, errorCodeWithMessageMap[nullPointer]}
 		}
 
 		rawStatData := lvl2["stats"].(map[string]interface{})
@@ -414,7 +423,7 @@ func ScrapeTiktokData(url string) (VideoMetrics, error) {
 		videoMetrics.CommentCount = rawStatData["commentCount"].(float64)
 	}
 
-	return videoMetrics, nil
+	return VideoMetrics{}, VideoAnalyticsError{}
 }
 
 /*
@@ -464,23 +473,23 @@ func getTitleAndUsername(url string, platform string) (string, string, error) {
 	return "", "", nil
 }
 
-func GetData(url string) (VideoMetrics, error) {
+func GetData(url string) VideoInfoResponse {
 	videoInfo := ProcessUrl(url) // this will only populate the platform field
 
 	switch videoInfo.Platform {
 	case "Youtube":
 		videoMetrics, err := ScrapeYoutubeData(url) // it will populate the videInfo with video data not going to return anything
-		return videoMetrics, err
+		return VideoInfoResponse{VideoInfo{}, videoMetrics, err}
 
 	case "Instagram":
 		// For instagram thing
 
 	case "Tiktok":
 		videoMetrics, err := ScrapeTiktokData(url)
-		return videoMetrics, err
+		return VideoInfoResponse{VideoInfo{}, videoMetrics, err}
 	}
 
-	return VideoMetrics{}, nil
+	return VideoInfoResponse{VideoInfo{}, VideoMetrics{}, VideoAnalyticsError{}}
 }
 
 type VideoAnalyticsProviderImpl struct {
@@ -541,8 +550,9 @@ func (videoAnalyticsProviderImpl *VideoAnalyticsProviderImpl) GetFullVideoMetric
 
 	go func() {
 		defer close(videoInfoWithErrChannel)
-		videoInfoMetrics, _ := GetData(info.Url)
-		videoInfoWithErrChannel <- VideoInfoResponse{info, videoInfoMetrics, VideoAnalyticsError{}}
+		videoInfoResponse := GetData(info.Url)
+		videoInfoResponse.VideoInfo = info
+		videoInfoWithErrChannel <- videoInfoResponse
 	}()
 
 	mutex.Lock()
