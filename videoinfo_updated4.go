@@ -19,18 +19,6 @@ var (
 	globalTime     time.Time     // it will be used to synchronise concurrent go routines
 )
 
-//type VideoViewTrackingInfo struct {
-//	Platform  string
-//	Username  string
-//	Url       string
-//	Id        int
-//	SourceId  int
-//	AudioId   int
-//	VoiceId   int
-//	WriterId  int
-//	SponsorId int
-//}
-
 type VideoViewTrackingInfo struct {
 	Platform string
 	Username string
@@ -59,14 +47,6 @@ func ProcessUrl(url string) VideoMetrics {
 
 	if is_youtube {
 		videoInfo.Platform = "Youtube"
-
-		//fmt.Println(url)
-		//channelNamePattern, _ := regexp.Compile(`(ab_channel=)([^&]+)`)
-		//channelName := channelNamePattern.FindString(url)
-		//// fmt.Println(tern)
-		//
-		//videoInfo.Username = channelName[11:]
-
 	}
 
 	// portion of the code that cehcks whether the url from instagram
@@ -87,9 +67,6 @@ func ProcessUrl(url string) VideoMetrics {
 
 	if is_tiktok {
 		videoInfo.Platform = "Tiktok"
-		//tiktokUserNamePattern, _ := regexp.Compile(`@([^\/]+)`)
-		//regexResult := tiktokUserNamePattern.FindString(url)
-		//videoInfo.Username = regexResult[1:]
 	}
 
 	return videoInfo
@@ -106,7 +83,6 @@ func getYoutubeVideoIdFromUrl(url string) string {
 	if strings.Contains(videoId, "&") {
 		videoId = strings.Split(videoId, "&")[0]
 	}
-	//fmt.Println(videoId)
 	return videoId
 }
 
@@ -118,7 +94,6 @@ func getYoutubeVideoDuration(url string) string {
 	}
 
 	htmlContent := soup.HTMLParse(soupObj)
-	//fmt.Println(htmlContent.Find("title"))
 	htmlTextContent := htmlContent.FullText()
 	jsonFirstPattern, err := regexp.Compile("{\"responseContext\"")
 	if err != nil {
@@ -142,6 +117,35 @@ func getYoutubeVideoDuration(url string) string {
 	error := json.Unmarshal([]byte(data), &jsonData)
 	if error != nil {
 		log.Fatalln("Something went wrong while unmarshalling the json data ", err)
+	}
+
+	// checking for nil pointer issue for each item in the json
+	if jsonData == nil {
+		log.Fatalln("Json Data is nil")
+		return getYoutubeVideoDuration(url)
+	}
+	if jsonData["contents"] == nil {
+		log.Fatal("Content keyword is not available in the jsonData")
+		return getYoutubeVideoDuration(url)
+	}
+	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"] == nil {
+		log.Fatal("twoColumnSearchResultsRenderer keyword is not available so trying again")
+		return getYoutubeVideoDuration(url)
+	}
+
+	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"].(map[string]interface{})["primaryContents"] == nil {
+		log.Fatal("primaryContents keyword is not found so retrying again ")
+		return getYoutubeVideoDuration(url)
+	}
+
+	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"].(map[string]interface{})["primaryContents"].(map[string]interface{})["sectionListRenderer"] == nil {
+		log.Fatalln("SectionListRenderer keyword is not found so retrying again ")
+		return getYoutubeVideoDuration(url)
+	}
+
+	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"].(map[string]interface{})["primaryContents"].(map[string]interface{})["sectionListRenderer"].(map[string]interface{})["contents"].([]interface{})[0].(map[string]interface{})["itemSectionRenderer"].(map[string]interface{})["contents"] == nil {
+		log.Fatal("contents keyword is not found so retrying again ")
+		return getYoutubeVideoDuration(url)
 	}
 
 	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"].(map[string]interface{})["primaryContents"].(map[string]interface{})["sectionListRenderer"].(map[string]interface{})["contents"].([]interface{})[0].(map[string]interface{})["itemSectionRenderer"].(map[string]interface{})["contents"].([]interface{})[0].(map[string]interface{})["videoRenderer"] == nil {
@@ -244,21 +248,9 @@ func ScrapeYoutubeData(videoInfo *VideoMetrics, url string) error {
 
 	videoInfo.ViewCount, _ = strconv.Atoi(videoView)
 
-	// channel name
-	// channelNameLink := htmlContent.Find("span", "itemprop", "author").Find("link", "itemprop", "name")
-	// channelName := channelNameLink.Attrs()["content"]
-	// videoInfo.Username = channelName
-
 	videoInfo.Duration = getYoutubeVideoDuration(url)
 	videoInfo.LikeCount = getYoutubeLikeCount(url)
 	videoInfo.CommentCount = getYoutubeCommentCount(url)
-
-	// getting youtube video title
-	//titleLink := htmlContent.Find("title")
-	//title := titleLink.Text()
-	//videoInfo.Title = title
-
-	//channelName, title, err := getTitleAndUsername()
 
 	return nil
 }
@@ -286,6 +278,7 @@ func getCaptionOfTiktok(url string) (string, error) {
 	// IMPORTANT: check for nil ptr
 	if htmlTextContent.Pointer == nil {
 		return "", errors.New("cannot find the tiktok caption for url: " + url)
+
 	}
 	caption := htmlTextContent.Attrs()["content"]
 
@@ -344,12 +337,6 @@ func ScrapeTiktokData(videoInfo *VideoMetrics, url string) error {
 		viewCount, _ := rawViewCount.(float64)
 
 		videoInfo.ViewCount = int(viewCount)
-
-		// fetching the channel name (in this case username)
-		// rawAuthorData := jsonData["ItemModule"].(map[string]interface{})[tiktokVideoId].(map[string]interface{})["author"]
-		// authorDataString, _ := rawAuthorData.(string)
-
-		// videoInfo.Username = authorDataString
 
 		videoDuration := jsonData["ItemModule"].(map[string]interface{})[tiktokVideoId].(map[string]interface{})["video"].(map[string]interface{})["duration"].(float64)
 		videoDurationConverted := time.Duration(videoDuration * 1e9)
@@ -487,17 +474,17 @@ type VideoInfoWithErr struct {
 
 // test code
 func main() {
-	//url := "https://www.tiktok.com/@prince_abdullah_1_2_3/video/7215628737218497794"
-	url := "https://www.youtube.com/watch?v=2RERHdL0ZWY&ab_channel=ChamokHasan"
+	url := "https://www.tiktok.com/@prince_abdullah_1_2_3/video/7215628737218497794"
+	//url := "https://www.youtube.com/watch?v=2RERHdL0ZWY&ab_channel=ChamokHasan"
 	//	url := "https://www.tiktok.com/@reddit.guy/video/7245740863991663914"
 
 	var channelArr []<-chan VideoInfoWithErr
 
 	wg := sync.WaitGroup{}
 	mutex := sync.Mutex{}
-	wg.Add(1)
+	wg.Add(10000)
 
-	for x := 0; x < 1; x++ {
+	for x := 0; x < 10000; x++ {
 		videoViewTrackingInfo := VideoViewTrackingInfo{Url: url}
 
 		tempChannel := GetViewData(videoViewTrackingInfo, &wg, &mutex)
@@ -510,12 +497,5 @@ func main() {
 		fmt.Println(videoItem.VideoMetrics)
 	}
 	wg.Wait()
-	//
-	//title, userName, err := getTitleAndUsername(url, "Tiktok")
-	//if err != nil {
-	//	log.Println(err)
-	//}
-	//
-	//fmt.Printf("Username : %s ; title : %s\n", userName, title)
 
 }

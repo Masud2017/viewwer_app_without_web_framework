@@ -24,6 +24,7 @@ const (
 	nullPointer                         = 700 // custom error code will start from 700
 	accessDenied                        = 701
 	invalidUriOrInternetConnectionIssue = 702
+	allOk                               = 0
 )
 
 var errorCodeWithMessageMap = map[int]string{
@@ -31,6 +32,7 @@ var errorCodeWithMessageMap = map[int]string{
 	700: "Found pointer while accessing the node",
 	701: "Access defined please check your url or wait for some time before retry",
 	702: "The url you have provide might be invalid or you have network connectivity issue.",
+	0:   "Everything is ok",
 }
 
 // VideoInfo are information about the video that do not change
@@ -80,14 +82,6 @@ func ProcessUrl(url string) VideoInfo {
 
 	if is_youtube {
 		videoInfo.Platform = "Youtube"
-
-		//fmt.Println(url)
-		//channelNamePattern, _ := regexp.Compile(`(ab_channel=)([^&]+)`)
-		//channelName := channelNamePattern.FindString(url)
-		//// fmt.Println(tern)
-		//
-		//videoInfo.Username = channelName[11:]
-
 	}
 
 	// portion of the code that cehcks whether the url from instagram
@@ -108,9 +102,6 @@ func ProcessUrl(url string) VideoInfo {
 
 	if is_tiktok {
 		videoInfo.Platform = "Tiktok"
-		//tiktokUserNamePattern, _ := regexp.Compile(`@([^\/]+)`)
-		//regexResult := tiktokUserNamePattern.FindString(url)
-		//videoInfo.Username = regexResult[1:]
 	}
 
 	return videoInfo
@@ -127,7 +118,6 @@ func getYoutubeVideoIdFromUrl(url string) string {
 	if strings.Contains(videoId, "&") {
 		videoId = strings.Split(videoId, "&")[0]
 	}
-	//fmt.Println(videoId)
 	return videoId
 }
 
@@ -165,6 +155,35 @@ func getYoutubeVideoDuration(url string) string {
 		log.Fatalln("Something went wrong while unmarshalling the json data ", err)
 	}
 
+	// checking for nil pointer issue for each item in the json
+	if jsonData == nil {
+		log.Fatalln("Json Data is nil so retrying again.")
+		return getYoutubeVideoDuration(url)
+	}
+	if jsonData["contents"] == nil {
+		log.Fatal("Content keyword is not available in the jsonData so retrying again.")
+		return getYoutubeVideoDuration(url)
+	}
+	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"] == nil {
+		log.Fatal("twoColumnSearchResultsRenderer keyword is not available so trying again.")
+		return getYoutubeVideoDuration(url)
+	}
+
+	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"].(map[string]interface{})["primaryContents"] == nil {
+		log.Fatal("primaryContents keyword is not found so retrying again.")
+		return getYoutubeVideoDuration(url)
+	}
+
+	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"].(map[string]interface{})["primaryContents"].(map[string]interface{})["sectionListRenderer"] == nil {
+		log.Fatalln("SectionListRenderer keyword is not found so retrying again.")
+		return getYoutubeVideoDuration(url)
+	}
+
+	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"].(map[string]interface{})["primaryContents"].(map[string]interface{})["sectionListRenderer"].(map[string]interface{})["contents"].([]interface{})[0].(map[string]interface{})["itemSectionRenderer"].(map[string]interface{})["contents"] == nil {
+		log.Fatal("contents keyword is not found so retrying again.")
+		return getYoutubeVideoDuration(url)
+	}
+
 	if jsonData["contents"].(map[string]interface{})["twoColumnSearchResultsRenderer"].(map[string]interface{})["primaryContents"].(map[string]interface{})["sectionListRenderer"].(map[string]interface{})["contents"].([]interface{})[0].(map[string]interface{})["itemSectionRenderer"].(map[string]interface{})["contents"].([]interface{})[0].(map[string]interface{})["videoRenderer"] == nil {
 		fmt.Println("😅 Didn't get the youtube video duration so retrying .. 😅")
 		return getYoutubeVideoDuration(url)
@@ -185,7 +204,7 @@ func getIntFromYoutubeDuration(duration string) int {
 	minute_in_second, _ := strconv.Atoi(minute_digit)
 	minute_in_second = minute_in_second * 60
 	second_digit_num, _ := strconv.Atoi(second_digit)
-	fmt.Println(second_digit)
+	//fmt.Println(second_digit)
 
 	return minute_in_second + second_digit_num
 }
@@ -245,7 +264,12 @@ func getYoutubeCommentCount(url string) float64 {
 	htmlContent := soup.HTMLParse(soupObj)
 	htmlTextContent := htmlContent.FullText()
 
-	commentCountPattern, _ := regexp.Compile(`contextualInfo":{"runs":\[{"text":"(\d*)?(\w*)?"}]}`)
+	commentCountPattern, err := regexp.Compile(`contextualInfo":{"runs":\[{"text":"(\d*)?(\w*)?"}]}`)
+
+	if err != nil {
+		log.Fatalln("facing issue while compiling the regular expression for contextualInfo ", err)
+	}
+
 	commentCountJson := commentCountPattern.FindString(htmlTextContent)
 	commentCountJson = commentCountJson[16:]
 
@@ -256,9 +280,20 @@ func getYoutubeCommentCount(url string) float64 {
 		fmt.Println(error)
 	}
 
+	if jsonData["runs"] == nil {
+		log.Fatalln("jsonData[\"runs\"] is null so retrying again .")
+		return getYoutubeCommentCount(url)
+	}
+
+	if jsonData["runs"].([]interface{})[0].(map[string]interface{})["text"] != nil {
+		log.Fatalln("jsonData[\"runs\"].([]interface{})[0].(map[string]interface{})[\"text\"] is null so retrying again.")
+
+		return getYoutubeCommentCount(url)
+	}
+
 	commentCountStr := jsonData["runs"].([]interface{})[0].(map[string]interface{})["text"]
 
-	fmt.Println(commentCountStr)
+	//fmt.Println(commentCountStr)
 	return getApproximateValueFromYoutubeCommentCount(commentCountStr.(string))
 }
 
@@ -268,7 +303,7 @@ func ScrapeYoutubeData(url string) (VideoMetrics, VideoAnalyticsError) {
 	soupObj, err := soup.Get(url)
 
 	if err != nil {
-		fmt.Println("An error happend while trying get the url")
+		log.Fatalln("An error happened while trying get the url")
 		//return VideoMetrics{}, errors.New("Error happening while trying to call \"soup.Get(url)\". Please check your internet connection ! ")
 		return VideoMetrics{}, VideoAnalyticsError{invalidUriOrInternetConnectionIssue, errorCodeWithMessageMap[invalidUriOrInternetConnectionIssue]}
 	}
@@ -284,7 +319,7 @@ func ScrapeYoutubeData(url string) (VideoMetrics, VideoAnalyticsError) {
 	videoMetrics.LikeCount = getYoutubeLikeCount(url)
 	videoMetrics.CommentCount = getYoutubeCommentCount(url)
 
-	return videoMetrics, VideoAnalyticsError{}
+	return videoMetrics, VideoAnalyticsError{allOk, errorCodeWithMessageMap[allOk]}
 }
 
 func GetTiktokVideoId(url string) string {
