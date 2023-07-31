@@ -324,7 +324,12 @@ func ScrapeYoutubeData(url string) (VideoMetrics, VideoAnalyticsError) {
 
 func GetTiktokVideoId(url string) string {
 	pattern := "\\/video\\/(\\w+)"
-	pattern_compiled, _ := regexp.Compile(pattern)
+	pattern_compiled, err := regexp.Compile(pattern)
+
+	if err != nil {
+		log.Fatalln("Error found while compiling the regular expression for tiktok video id ", err)
+	}
+
 	res := pattern_compiled.FindString(url)
 	videoId := strings.Split(res, "/")[2]
 
