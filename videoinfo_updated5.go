@@ -341,7 +341,7 @@ func getCaptionOfTiktok(url string) (string, error) {
 
 	if err != nil {
 		//fmt.Println(""err)
-		return "", errors.New("please check your internet connection or the url that you are provided")
+		return "", errors.New("please check your internet connection or the url that you are provided ")
 	}
 
 	htmlContent := soup.HTMLParse(soupObj)
@@ -353,7 +353,7 @@ func getCaptionOfTiktok(url string) (string, error) {
 	}
 	caption := htmlTextContent.Attrs()["content"]
 
-	fmt.Println("Testing the value of tiktok caption ", caption)
+	//fmt.Println("Testing the value of tiktok caption ", caption)
 	return caption, err
 }
 
@@ -369,7 +369,7 @@ func GetTiktokVideoDuration(url string) (int, error) {
 		//time.Sleep(time.Second * time.Duration(waitTime))
 		time.Sleep(time.Second * 10)
 
-		GetTiktokVideoDuration(url)
+		return GetTiktokVideoDuration(url)
 
 	}
 
@@ -387,6 +387,31 @@ func GetTiktokVideoDuration(url string) (int, error) {
 
 		// fetching the view count
 		tiktokVideoId := GetTiktokVideoId(url)
+
+		if jsonData == nil {
+			log.Fatalln("jsonData is nil so retrying again.")
+			return GetTiktokVideoDuration(url)
+		}
+
+		if jsonData["ItemModule"] == nil {
+			log.Fatalln("jsonData[\"ItemModule\"] is null so retrying again")
+			return GetTiktokVideoDuration(url)
+		}
+
+		if jsonData["ItemModule"].(map[string]interface{})[tiktokVideoId] == nil {
+			log.Fatalln("jsonData[\"ItemModule\"].(map[string]interface{})[tiktokVideoId] is null so retrying agian ")
+			return GetTiktokVideoDuration(url)
+		}
+
+		if jsonData["ItemModule"].(map[string]interface{})[tiktokVideoId].(map[string]interface{})["video"] == nil {
+			log.Fatalln("jsonData[\"ItemModule\"].(map[string]interface{})[tiktokVideoId].(map[string]interface{})[\"video\"] is null so retrying again")
+			return GetTiktokVideoDuration(url)
+		}
+
+		if jsonData["ItemModule"].(map[string]interface{})[tiktokVideoId].(map[string]interface{})["video"].(map[string]interface{})["duration"] == nil {
+			log.Fatalln("jsonData[\"ItemModule\"].(map[string]interface{})[tiktokVideoId].(map[string]interface{})[\"video\"].(map[string]interface{})[\"duration\"] is null so retrying again")
+			return GetTiktokVideoDuration(url)
+		}
 
 		videoDuration := jsonData["ItemModule"].(map[string]interface{})[tiktokVideoId].(map[string]interface{})["video"].(map[string]interface{})["duration"].(float64)
 		videoDurationConverted := time.Duration(videoDuration * 1e9)
