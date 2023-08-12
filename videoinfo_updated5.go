@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	requestCounter int64     = 0 // counter for request in TikTok
-	globalTime     time.Time     // it will be used to synchronise concurrent go routines
+	requestCounter  int64     = 0 // counter for request in TikTok
+	globalTime      time.Time     // it will be used to synchronise concurrent go routines
+	instagramCookie = `mid=ZIlxKgALAAFScymuGZ63XopJbgmQ; ig_did=3D7F7CB4-D713-4AC0-B289-1CB257D7146C; ig_nrcb=1; datr=KHGJZGAHYNaqVNT8a_ULEH_J; fbm_124024574287414=base_domain=.instagram.com; ds_user_id=6428581218; csrftoken=gIR0LRMzGwtZBswOMsjUFlvTtIYvHD8b; shbid="3375\0546428581218\0541722876021:01f73ddcd6511a5f2ae24cb30cd970559f9ee04ddd2c67e1d86cba68c3d1af338a9b9200"; shbts="1691340021\0546428581218\0541722876021:01f73e78321dfa01034452fefe26ceed79a8d4c6fa1cac2520f0ce956f70dcf86433a578"; sessionid=6428581218%3AA5GFgB30EGGQFW%3A22%3AAYfA3idt6kMo1YUWRLruKZsif8s1QKN0Qk54Ib3quTE; fbsr_124024574287414=lU0NJQRAp26tlgSlWEmuwDoqtz93XJWm7LscH6tRaB8.eyJ1c2VyX2lkIjoiMTAwMDA1ODY3NjEwNzE1IiwiY29kZSI6IkFRRGR4SXpZLV9rbjFzdnV1emUzb0VwS2RZOVFBSWRTaTVaMGc3QTlzM0hIakZYQ3lxbFFwZmFQcWdZM0hWRDdVaEREYl9lR1JuMlFXVmhvZFJMZG9JSnloWHpqekhCd3BfQW9oUzV3X3d2bV9BVnVleW5rd0s3cUZzeWhFc3pHWk1FSk9CSUJvMDc3VkN3SHdIMDYzRmV1ZWkzOUZwYVJGaE9FMVlJelVpY1NQcFpBXzF6MS01YXg0OXlUUUN2UTIwWVRJUEp6eFROTGpIeXo4RDVHeWhZR3BiMzVscURZc2M1dXh0MTFFX1VRYUo2RnRqV0hRVVZkVWoxcmRWak1GeEJLdnNydVYtT1Rkb1ZrbnlCODZvU1V5NVV4LWRaLV9hcm0ySlctd3NFOVJQLWlkbWVDS1lMY2JsTE10dmowUGtjcWx1T2dxTGNnWUpmMUVKUjM3NTMtIiwib2F1dGhfdG9rZW4iOiJFQUFCd3pMaXhuallCTzF2enNqWGJzRzZ5TDVEbXVMTkNWVHFzM0ViblpDQkJCOXdublZCT1QzWkFFVndhRzBaQUdhanVVMVBMWkM3N2NxTGFCY25kSWZtTXA2T29ITFJQek1aQ1lTZlcydExNNDdaQUlLaW50T3JqZVFrTmdrcWhGcjV5dDRYbFIzdTEzRlVaQmZUaFZ6ZVZLUU1EQnVLSXhUMHNtZ1JzekhlVVd2NkMxd09ReVdNc2l1MHdmUm5aQTBNZ3F1Z1pEIiwiYWxnb3JpdGhtIjoiSE1BQy1TSEEyNTYiLCJpc3N1ZWRfYXQiOjE2OTEzNDAzNjd9; rur="PRN\0546428581218\0541722876370:01f703c1d3cc873a19efcd7747e238391f399dcb59297f69f30accb544200f02748f852f"`
 )
 
 const (
@@ -440,6 +441,11 @@ func GetTiktokVideoDuration(url string) (int, error) {
 	return 0, nil
 }
 
+func GetInstagramVideoDuration(jsonData map[string]interface{}) (int, error) {
+	videoDuration := jsonData["items"].([]interface{})[0].(map[string]interface{})["video_duration"].(float64)
+	return int(videoDuration), nil
+}
+
 func ScrapeTiktokData(url string) (VideoMetrics, VideoAnalyticsError) {
 	var videoMetrics VideoMetrics
 	rand.Seed(time.Now().UnixNano())
@@ -526,7 +532,7 @@ func shortcodeToMediaID(shortcode string) int {
 	return mediaID
 }
 
-func ScrapeInstagram(url string, cookie string) (VideoMetrics, VideoAnalyticsError) {
+func ScrapeInstagram(url string) (VideoMetrics, VideoAnalyticsError) {
 	//shortCode, _ := extractMediaID(url)
 	//mediaid := shortcodeToMediaID(shortCode)
 	//
@@ -567,7 +573,7 @@ func ScrapeInstagram(url string, cookie string) (VideoMetrics, VideoAnalyticsErr
 	////
 	//fmt.Println(soupObj)
 
-	cmd := exec.Command("python", "python_solution.py")
+	cmd := exec.Command("python", "python_solution.py", instagramCookie, url)
 	out, err := cmd.Output()
 	fmt.Println(err)
 	jsonOutput := string(out)
@@ -675,7 +681,7 @@ func GetData(url string) VideoInfoResponse {
 		return VideoInfoResponse{VideoInfo{}, videoMetrics, err}
 
 	case "Instagram":
-		videoMetrics, err := ScrapeInstagram(url, "'")
+		videoMetrics, err := ScrapeInstagram(url)
 		return VideoInfoResponse{VideoInfo{}, videoMetrics, err}
 
 	case "Tiktok":
@@ -709,7 +715,8 @@ func (videoAnalyticsProviderImpl *VideoAnalyticsProviderImpl) GetVideoInfo(url s
 		videoInfo.Duration = duration
 		break
 	case "Instagram":
-		cmd := exec.Command("python", "python_solution.py")
+		//cookies := ""
+		cmd := exec.Command("python", "python_solution.py", instagramCookie, url)
 		out, _ := cmd.Output()
 		jsonOutput := string(out)
 
@@ -720,7 +727,8 @@ func (videoAnalyticsProviderImpl *VideoAnalyticsProviderImpl) GetVideoInfo(url s
 			fmt.Println(error)
 		}
 
-		playCount := jsonData["items"].([]interface{})[0].(map[string]interface{})["username"].(string)
+		duration, _ := GetInstagramVideoDuration(jsonData)
+		videoInfo.Duration = duration
 
 		break
 	}
@@ -809,6 +817,6 @@ func main() {
 	//
 	//fmt.Printf("Username : %s ; title : %s\n", userName, title)
 
-	ScrapeInstagram("https://www.instagram.com/reel/CoX3tHCOEUS/", `mid=ZIlxKgALAAFScymuGZ63XopJbgmQ; ig_did=3D7F7CB4-D713-4AC0-B289-1CB257D7146C; ig_nrcb=1; datr=KHGJZGAHYNaqVNT8a_ULEH_J; fbm_124024574287414=base_domain=.instagram.com; ds_user_id=6428581218; csrftoken=gIR0LRMzGwtZBswOMsjUFlvTtIYvHD8b; shbid="3375\0546428581218\0541722876021:01f73ddcd6511a5f2ae24cb30cd970559f9ee04ddd2c67e1d86cba68c3d1af338a9b9200"; shbts="1691340021\0546428581218\0541722876021:01f73e78321dfa01034452fefe26ceed79a8d4c6fa1cac2520f0ce956f70dcf86433a578"; sessionid=6428581218%3AA5GFgB30EGGQFW%3A22%3AAYfA3idt6kMo1YUWRLruKZsif8s1QKN0Qk54Ib3quTE; fbsr_124024574287414=lU0NJQRAp26tlgSlWEmuwDoqtz93XJWm7LscH6tRaB8.eyJ1c2VyX2lkIjoiMTAwMDA1ODY3NjEwNzE1IiwiY29kZSI6IkFRRGR4SXpZLV9rbjFzdnV1emUzb0VwS2RZOVFBSWRTaTVaMGc3QTlzM0hIakZYQ3lxbFFwZmFQcWdZM0hWRDdVaEREYl9lR1JuMlFXVmhvZFJMZG9JSnloWHpqekhCd3BfQW9oUzV3X3d2bV9BVnVleW5rd0s3cUZzeWhFc3pHWk1FSk9CSUJvMDc3VkN3SHdIMDYzRmV1ZWkzOUZwYVJGaE9FMVlJelVpY1NQcFpBXzF6MS01YXg0OXlUUUN2UTIwWVRJUEp6eFROTGpIeXo4RDVHeWhZR3BiMzVscURZc2M1dXh0MTFFX1VRYUo2RnRqV0hRVVZkVWoxcmRWak1GeEJLdnNydVYtT1Rkb1ZrbnlCODZvU1V5NVV4LWRaLV9hcm0ySlctd3NFOVJQLWlkbWVDS1lMY2JsTE10dmowUGtjcWx1T2dxTGNnWUpmMUVKUjM3NTMtIiwib2F1dGhfdG9rZW4iOiJFQUFCd3pMaXhuallCTzF2enNqWGJzRzZ5TDVEbXVMTkNWVHFzM0ViblpDQkJCOXdublZCT1QzWkFFVndhRzBaQUdhanVVMVBMWkM3N2NxTGFCY25kSWZtTXA2T29ITFJQek1aQ1lTZlcydExNNDdaQUlLaW50T3JqZVFrTmdrcWhGcjV5dDRYbFIzdTEzRlVaQmZUaFZ6ZVZLUU1EQnVLSXhUMHNtZ1JzekhlVVd2NkMxd09ReVdNc2l1MHdmUm5aQTBNZ3F1Z1pEIiwiYWxnb3JpdGhtIjoiSE1BQy1TSEEyNTYiLCJpc3N1ZWRfYXQiOjE2OTEzNDAzNjd9; rur="PRN\0546428581218\0541722876370:01f703c1d3cc873a19efcd7747e238391f399dcb59297f69f30accb544200f02748f852f"`)
+	ScrapeInstagram("https://www.instagram.com/reel/Cv0GX-Rplmj/")
 
 }

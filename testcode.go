@@ -81,6 +81,6 @@ func main() {
 		fmt.Println(error)
 	}
 
-	playCount := jsonData["items"].([]interface{})[0].(map[string]interface{})["ig_artist"].(map[string]interface{})["username"]
+	playCount := jsonData["items"].([]interface{})[0].(map[string]interface{})["video_duration"]
 	fmt.Println(playCount)
 }
