@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/anaskhan96/soup"
+	//"github.com/kluctl/go-embed-python/python"
 	"log"
 	"math/rand"
 	"os"
@@ -781,42 +782,35 @@ func (videoAnalyticsProviderImpl *VideoAnalyticsProviderImpl) GetFullVideoMetric
 
 // test code
 func main() {
-	//url := "https://www.tiktok.com/@prince_abdullah_1_2_3/video/7215628737218497794"
-	////url := "https://www.youtube.com/watch?v=2RERHdL0ZWY&ab_channel=ChamokHasan"
-	////	url := "https://www.tiktok.com/@reddit.guy/video/7245740863991663914"
-	//
+	url := "https://www.instagram.com/reel/Cv0GX-Rplmj/"
+	//url := "https://www.youtube.com/watch?v=2RERHdL0ZWY&ab_channel=ChamokHasan"
+	//	url := "https://www.tiktok.com/@reddit.guy/video/7245740863991663914"
+
 	//urlArray := []string{"https://www.youtube.com/watch?v=JTjmkai8iMI&ab_channel=Askthereddit",
 	//	"https://www.youtube.com/watch?v=4aV2OThWXXI&ab_channel=Askthereddit",
 	//	"https://www.youtube.com/watch?v=XqCAsTNX7Rw&ab_channel=Askthereddit"}
-	//
-	//var channelArr []<-chan VideoInfoResponse
-	//var videoAnalyticsProvider VideoAnalyticsProviderImpl
-	//
-	//wg := sync.WaitGroup{}
-	//mutex := sync.Mutex{}
-	//wg.Add(3)
-	//
-	//for x := 0; x < 3; x++ {
-	//	videoInfo, _ := videoAnalyticsProvider.GetVideoInfo(urlArray[x])
-	//
-	//	tempChannel := videoAnalyticsProvider.GetFullVideoMetrics(videoInfo, &wg, &mutex)
-	//
-	//	channelArr = append(channelArr, tempChannel)
-	//}
-	//
-	//for _, channelItem := range channelArr {
-	//	videoItem := <-channelItem
-	//	fmt.Println(videoItem)
-	//}
-	//wg.Wait()
-	//
-	//title, userName, err := getTitleAndUsername(url, "Tiktok")
-	//if err != nil {
-	//	log.Println(err)
-	//}
-	//
-	//fmt.Printf("Username : %s ; title : %s\n", userName, title)
 
-	ScrapeInstagram("https://www.instagram.com/reel/Cv0GX-Rplmj/")
+	var channelArr []<-chan VideoInfoResponse
+	var videoAnalyticsProvider VideoAnalyticsProviderImpl
+
+	wg := sync.WaitGroup{}
+	mutex := sync.Mutex{}
+	wg.Add(1)
+
+	for x := 0; x < 1; x++ {
+		videoInfo, _ := videoAnalyticsProvider.GetVideoInfo(url)
+
+		tempChannel := videoAnalyticsProvider.GetFullVideoMetrics(videoInfo, &wg, &mutex)
+
+		channelArr = append(channelArr, tempChannel)
+	}
+
+	for _, channelItem := range channelArr {
+		videoItem := <-channelItem
+		fmt.Println(videoItem)
+	}
+	wg.Wait()
+
+	//ScrapeInstagram("https://www.instagram.com/reel/Cv0GX-Rplmj/")
 
 }
